@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Island Castaways</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Island Castaways</h1>
+      <p class="tagline">Every castaway is their own AI agent, with their own stats, budget and grudges.</p>
+    </div>
+    <span id="mode" class="badge">Loading...</span>
+  </header>
+
+  <main>
+    <p id="page-message" class="message"></p>
+
+    <section class="panel">
+      <h2>1. Choose the cast</h2>
+      <div id="cast-list" class="cast-list"></div>
+      <div class="row">
+        <label>Talk budget per intermission (tokens)
+          <input id="talk-budget" type="number" min="50" max="5000" step="50" value="600">
+        </label>
+        <button id="start-game" type="button">Start new game</button>
+      </div>
+      <p id="start-message" class="message"></p>
+    </section>
+
+    <section class="panel">
+      <h2>2. Add your own castaway</h2>
+      <form id="create-form" class="form-grid">
+        <label>Name
+          <input id="char-name" required maxlength="40">
+        </label>
+        <label>Background
+          <textarea id="char-bio" required maxlength="500" rows="3"></textarea>
+        </label>
+        <label>Personality
+          <textarea id="char-personality" required maxlength="300" rows="2"></textarea>
+        </label>
+        <fieldset class="stats-fields">
+          <legend>Stats (1 to 10)</legend>
+          <label>Physical <input id="char-physical" type="number" min="1" max="10" value="5" required></label>
+          <label>Mental <input id="char-mental" type="number" min="1" max="10" value="5" required></label>
+          <label>Social <input id="char-social" type="number" min="1" max="10" value="5" required></label>
+          <label>Strategy <input id="char-strategy" type="number" min="1" max="10" value="5" required></label>
+        </fieldset>
+        <div class="row">
+          <button type="submit">Add castaway</button>
+          <p id="character-message" class="message"></p>
+        </div>
+      </form>
+    </section>
+
+    <section id="game" class="panel" hidden>
+      <h2>3. Island</h2>
+      <div class="row">
+        <strong id="game-summary"></strong>
+        <label class="inline"><input id="talk-toggle" type="checkbox" checked> Private talks before each episode</label>
+        <button id="next-episode" type="button">Run next episode</button>
+        <button id="reset-game" type="button" class="secondary">End game</button>
+      </div>
+      <p id="game-message" class="message"></p>
+      <p id="spend" class="muted"></p>
+
+      <h3>Castaways</h3>
+      <div id="players" class="players"></div>
+
+      <h3>Tribal councils</h3>
+      <div id="episodes"></div>
+
+      <h3>Private conversations</h3>
+      <div id="conversations"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
