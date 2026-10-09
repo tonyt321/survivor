@@ -14,9 +14,9 @@ npm start
 ANTHROPIC_API_KEY=sk-ant-... npm start
 ```
 
-Open http://127.0.0.1:3000.
+Open http://127.0.0.1:7965.
 
-Optional settings: `ANTHROPIC_MODEL` (default `claude-haiku-5-5`), `PORT` (default 3000), `HOST` (default 127.0.0.1).
+Optional settings: `ANTHROPIC_MODEL` (default `claude-haiku-5-5`), `PORT` (default 7965), `HOST` (default 127.0.0.1).
 
 ## How a game works
 
