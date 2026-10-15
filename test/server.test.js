@@ -1,106 +1,123 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from '../server.js';
-import { demoLlm } from '../lib/llm.js';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { createServer, loadOrCreateToken } from '../server.js';
 
-let server;
-let base;
-
-before(async () => {
-  // dataFile null keeps state in memory; demoLlm means no real API calls.
-  server = await createServer({ dataFile: null, llm: demoLlm });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  base = `http://127.0.0.1:${server.address().port}`;
-});
-
-after(() => new Promise((resolve) => server.close(resolve)));
-
-const call = async (method, path, body) => {
-  const res = await fetch(base + path, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  return { status: res.status, data: text ? JSON.parse(text) : null };
+const TOKEN = 'test-token-0123456789abcdef';
+const turns = [];
+const fakeLlm = {
+  async complete(turn) {
+    turns.push(turn);
+    return { text: '{"vote":"Dana Reyes"}', inputTokens: 100, outputTokens: 12 };
+  },
 };
 
-test('status reports demo mode without an API key', async () => {
-  const { status, data } = await call('GET', '/api/status');
-  assert.equal(status, 200);
-  assert.equal(data.mode, 'demo');
-  assert.equal(data.model, 'claude-haiku-5-5');
+const servers = [];
+async function start(options) {
+  const server = createServer({ accessToken: TOKEN, llm: fakeLlm, live: true, dailyLimit: 3, ...options });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  servers.push(server);
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+let base;
+before(async () => { base = await start(); });
+after(() => Promise.all(servers.map((s) => new Promise((resolve) => s.close(resolve)))));
+
+const authed = { 'x-access-token': TOKEN };
+const agent = (url, body, headers = authed) => fetch(`${url}/api/agent`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', ...headers },
+  body: JSON.stringify(body),
+});
+const turn = { system: 'You are Dana.', prompt: 'Vote.', maxTokens: 150 };
+
+test('the page is locked without the token', async () => {
+  const page = await fetch(`${base}/`);
+  assert.equal(page.status, 401);
+  assert.match(await page.text(), /This game is private/);
+
+  const wrong = await fetch(`${base}/?t=nope`, { redirect: 'manual' });
+  assert.equal(wrong.status, 401);
+
+  const api = await fetch(`${base}/api/status`);
+  assert.equal(api.status, 401);
 });
 
-test('the castaway library lists defaults and accepts custom castaways', async () => {
-  const added = await call('POST', '/api/characters', {
-    name: 'Test Castaway',
-    bio: 'A custom test character.',
-    personality: 'Very test-like.',
-    stats: { physical: 5, mental: 5, social: 5, strategy: 5 },
-  });
-  assert.equal(added.status, 201);
+test('the link token becomes a cookie and is removed from the address', async () => {
+  const res = await fetch(`${base}/?t=${TOKEN}`, { redirect: 'manual' });
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get('location'), '/');
+  const cookie = res.headers.get('set-cookie');
+  assert.match(cookie, /ic_token=.*HttpOnly/);
 
-  const { data } = await call('GET', '/api/characters');
-  assert.equal(data.characters.filter((c) => !c.custom).length, 10);
-  assert.ok(data.characters.some((c) => c.name === 'Test Castaway' && c.custom));
-
-  const bad = await call('POST', '/api/characters', { name: 'Broken', bio: 'x', personality: 'y', stats: {} });
-  assert.equal(bad.status, 400);
-});
-
-test('a full game plays through the API and default castaways cannot be deleted', async () => {
-  const started = await call('POST', '/api/games', {
-    characterIds: ['dana-reyes', 'marcus-oyelaran', 'priya-natarajan', 'toby-finch'],
-    tokensPerIntermission: 400,
-  });
-  assert.equal(started.status, 201);
-  assert.equal(started.data.game.players.length, 4);
-
-  let last;
-  for (let i = 0; i < 10; i++) {
-    const res = await call('POST', '/api/game/episode', { talk: true });
-    assert.equal(res.status, 200, JSON.stringify(res.data));
-    last = res.data;
-    if (last.game.phase === 'over') break;
-  }
-  assert.equal(last.game.phase, 'over');
-  assert.ok(last.game.winner);
-
-  const after = await call('POST', '/api/game/episode', { talk: true });
-  assert.equal(after.status, 409);
-
-  const del = await call('DELETE', '/api/characters/dana-reyes');
-  assert.equal(del.status, 404);
-
-  const reset = await call('POST', '/api/game/reset');
-  assert.equal(reset.status, 204);
-});
-
-test('invalid game requests get clear errors', async () => {
-  const tooFew = await call('POST', '/api/games', { characterIds: ['dana-reyes'] });
-  assert.equal(tooFew.status, 400);
-
-  const unknown = await call('POST', '/api/games', {
-    characterIds: ['dana-reyes', 'nobody', 'marcus-oyelaran', 'toby-finch'],
-  });
-  assert.equal(unknown.status, 400);
-
-  const tokens = await call('POST', '/api/games', {
-    characterIds: ['dana-reyes', 'marcus-oyelaran', 'toby-finch', 'leo-varga'],
-    tokensPerIntermission: 10,
-  });
-  assert.equal(tokens.status, 400);
-});
-
-test('the page and its scripts are served, and paths cannot escape public/', async () => {
-  const page = await fetch(base + '/');
+  const page = await fetch(`${base}/`, { headers: { cookie: cookie.split(';')[0] } });
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Island Castaways/);
+  assert.match(await page.text(), /<title>Island Castaways<\/title>/);
 
-  const js = await fetch(base + '/app.js');
-  assert.match(js.headers.get('content-type'), /javascript/);
+  const engine = await fetch(`${base}/engine.js`, { headers: { cookie: cookie.split(';')[0] } });
+  assert.equal(engine.status, 200);
+  assert.match(engine.headers.get('content-type'), /javascript/);
+});
 
-  const escape = await fetch(base + '/..%2Fserver.js');
-  assert.equal(escape.status, 404);
+test('status reports live mode and the daily limit', async () => {
+  const res = await fetch(`${base}/api/status`, { headers: authed });
+  const data = await res.json();
+  assert.equal(data.mode, 'live');
+  assert.equal(data.dailyLimit, 3);
+});
+
+test('agent turns go to Claude and stop at the daily limit', async () => {
+  const url = await start();
+  for (let i = 1; i <= 3; i++) {
+    const res = await agent(url, turn);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.text, '{"vote":"Dana Reyes"}');
+    assert.equal(data.callsToday, i);
+  }
+  const blocked = await agent(url, turn);
+  assert.equal(blocked.status, 429);
+  assert.match((await blocked.json()).error, /limit of 3/);
+  assert.deepEqual(
+    { system: turns.at(-1).system, prompt: turns.at(-1).prompt, maxTokens: turns.at(-1).maxTokens },
+    turn,
+  );
+});
+
+test('agent turns are refused without the token or with bad input', async () => {
+  assert.equal((await agent(base, turn, {})).status, 401);
+  assert.equal((await agent(base, { ...turn, prompt: '' })).status, 400);
+  assert.equal((await agent(base, { ...turn, maxTokens: 5000 })).status, 400);
+  assert.equal((await agent(base, { ...turn, prompt: 'x'.repeat(9000) })).status, 400);
+});
+
+test('without an API key only scripted play is offered', async () => {
+  const url = await start({ live: false });
+  const status = await (await fetch(`${url}/api/status`, { headers: authed })).json();
+  assert.equal(status.mode, 'demo');
+  assert.equal((await agent(url, turn)).status, 503);
+});
+
+test('paths cannot escape the public folder', async () => {
+  const res = await fetch(`${base}/..%2Fserver.js`, { headers: authed });
+  assert.equal(res.status, 404);
+});
+
+test('a short token is rejected and a new token is saved and reused', async () => {
+  assert.throws(() => createServer({ accessToken: 'short' }), /at least 16/);
+
+  const dir = await mkdtemp(path.join(tmpdir(), 'ic-token-'));
+  const file = path.join(dir, 'access-token');
+  try {
+    const first = await loadOrCreateToken(file);
+    assert.ok(first.length >= 40);
+    assert.equal(await loadOrCreateToken(file), first);
+    assert.equal((await readFile(file, 'utf8')).trim(), first);
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

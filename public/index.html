@@ -1,83 +1,233 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Island Castaways</title>
-  <link rel="stylesheet" href="/style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Island Castaways</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Figtree:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one column of stacked "camp" sections; the game board leads once a game exists. Torches mark who is still in. */
+:root {
+  --bg: #eaf3f0;
+  --surface: #f8fcfb;
+  --ink: #12302a;
+  --muted: #557069;
+  --line: #c6dad4;
+  --accent: #c94a12;
+  --accent-ink: #ffffff;
+  --flame: #f08a24;
+  --danger: #b42318;
+  --font-display: "Bowlby One SC", "Arial Black", Impact, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1a17; --surface: #142521; --ink: #e3efe9; --muted: #8fa9a1; --line: #29413b;
+    --accent: #ff7a3d; --accent-ink: #1b0b03; --flame: #ffb347; --danger: #f97066; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1a17; --surface: #142521; --ink: #e3efe9; --muted: #8fa9a1; --line: #29413b;
+  --accent: #ff7a3d; --accent-ink: #1b0b03; --flame: #ffb347; --danger: #f97066; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 56px; display: grid; gap: 20px; }
+h1, h2 { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.01em; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.8rem); line-height: 1; }
+h2 { font-size: 1.25rem; }
+h3 { margin: 0; font-size: 1rem; }
+.top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; justify-content: space-between; }
+.top p { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
+.mode { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.mode button { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 999px; font-weight: 600; }
+.mode button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.mode button:disabled { opacity: 0.4; cursor: not-allowed; }
+section.camp { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+button { font: inherit; cursor: pointer; }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); padding: 9px 16px; border-radius: 10px; font-weight: 700; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn:disabled { opacity: 0.5; cursor: wait; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.msg { margin: 0; color: var(--muted); font-size: 0.9rem; min-height: 1.35em; }
+.msg.err { color: var(--danger); }
+input, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; }
+label.field { display: grid; gap: 4px; font-size: 0.88rem; font-weight: 600; }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 0.9rem; }
+label.check input { width: auto; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+.cast { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.pick { display: flex; gap: 10px; align-items: center; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-width: 0; }
+.pick input { width: auto; flex: none; }
+.pick .who { min-width: 0; flex: 1; }
+.pick .who strong { display: block; overflow-wrap: anywhere; }
+.pick .who small { color: var(--muted); font-family: var(--font-data); font-size: 0.75rem; }
+.pick .yours { color: var(--accent); font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.link { border: 0; background: none; color: var(--danger); padding: 0; font-size: 0.82rem; }
+
+.form { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.form .wide { grid-column: 1 / -1; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 620px) { .form { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.player { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--bg); display: grid; gap: 8px; align-content: start; min-width: 0; }
+.player.out { opacity: 0.55; }
+.player .name { display: flex; gap: 10px; align-items: center; }
+.player .name strong { overflow-wrap: anywhere; }
+.player .status { font-size: 0.78rem; color: var(--muted); }
+.torch { width: 14px; height: 22px; flex: none; position: relative; }
+.torch::before { content: ""; position: absolute; left: 5px; bottom: 0; width: 4px; height: 12px; background: var(--muted); border-radius: 2px; }
+.torch::after { content: ""; position: absolute; left: 2px; top: 0; width: 10px; height: 12px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: var(--flame); box-shadow: 0 0 10px var(--flame); }
+.player.out .torch::after { background: transparent; box-shadow: none; border: 1px dashed var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips span { font-family: var(--font-data); font-size: 0.72rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
+.bio { margin: 0; font-size: 0.84rem; color: var(--muted); }
+.bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--flame); }
+.budget small { color: var(--muted); font-size: 0.76rem; }
+
+.log { display: grid; gap: 10px; }
+.entry { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; display: grid; gap: 6px; min-width: 0; }
+.entry.council { border-left-color: var(--accent); }
+.entry ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.92rem; }
+.entry q { color: var(--muted); }
+.entry p { margin: 0; overflow-wrap: anywhere; }
+.result { font-weight: 700; }
+.tally { font-family: var(--font-data); font-size: 0.78rem; color: var(--muted); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.two > div { min-width: 0; display: grid; gap: 10px; align-content: start; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+.progress { font-weight: 600; color: var(--accent); }
+.empty { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.banner { position: relative; overflow: hidden; border-radius: 16px; min-height: 190px; display: flex; align-items: flex-end; padding: 22px; color: #fff8ec; }
+.banner .scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+.banner > div { position: relative; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55); }
+.banner p { margin: 6px 0 0; max-width: 60ch; color: #fff1dc; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.avatar { width: 40px; height: 40px; flex: none; border-radius: 10px; object-fit: cover; display: inline-grid; place-items: center; background: hsl(var(--h, 160) 42% 38%); color: #fff; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.04em; }
+.player .avatar { width: 64px; height: 64px; border-radius: 12px; font-size: 1.2rem; }
+.player.out .avatar { filter: grayscale(1); }
+.portrait { position: relative; flex: none; }
+.portrait .torch { position: absolute; right: -6px; bottom: -4px; }
+.photo-btn { color: var(--accent); font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.photo-btn input { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .player:not(.out) .torch::after { animation: flicker 1.8s ease-in-out infinite alternate; }
+  @keyframes flicker { from { transform: scale(1); opacity: 1; } to { transform: scale(0.88, 0.95); opacity: 0.85; } }
+}
+</style>
 </head>
 <body>
-  <header class="top">
+<div class="wrap">
+  <header class="banner">
+    <svg class="scene" viewBox="0 0 1200 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#173f5c"/><stop offset="0.55" stop-color="#c9673a"/><stop offset="1" stop-color="#f3b866"/></linearGradient>
+        <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d6670"/><stop offset="1" stop-color="#0b2f38"/></linearGradient>
+      </defs>
+      <rect width="1200" height="260" fill="url(#sky)"/>
+      <circle cx="930" cy="178" r="64" fill="#ffd27a"/>
+      <rect y="180" width="1200" height="80" fill="url(#sea)"/>
+      <path d="M0 196 H1200" stroke="#f6c47c" stroke-opacity="0.35" stroke-width="2"/>
+      <path d="M0 214 H1200" stroke="#f6c47c" stroke-opacity="0.18" stroke-width="2"/>
+      <path d="M820 192 Q880 160 1000 164 Q1100 168 1150 194 Z" fill="#1d1b14"/>
+      <g stroke="#1d1b14" stroke-linecap="round" fill="none">
+        <path d="M960 170 Q952 120 978 82" stroke-width="7"/>
+        <path d="M978 82 q-44 -14 -70 14 M978 82 q-30 -32 -66 -26 M978 82 q36 -30 70 -16 M978 82 q46 -2 64 30 M978 82 q4 -38 -10 -54" stroke-width="6"/>
+        <path d="M1050 178 Q1046 140 1066 112" stroke-width="6"/>
+        <path d="M1066 112 q-36 -10 -56 12 M1066 112 q30 -24 58 -10 M1066 112 q38 2 50 26 M1066 112 q-20 -28 -50 -20" stroke-width="5"/>
+      </g>
+      <g fill="#ffb347">
+        <path d="M120 260 L126 200 L132 260 Z" fill="#2a2418"/><ellipse cx="126" cy="194" rx="7" ry="11"/>
+        <path d="M190 260 L196 206 L202 260 Z" fill="#2a2418"/><ellipse cx="196" cy="200" rx="6" ry="10"/>
+      </g>
+    </svg>
     <div>
       <h1>Island Castaways</h1>
-      <p class="tagline">Every castaway is their own AI agent, with their own stats, budget and grudges.</p>
+      <p>Each castaway is played by its own Claude agent. They talk in private between episodes, then vote each other out until a jury picks the winner.</p>
     </div>
-    <span id="mode" class="badge">Loading...</span>
   </header>
+  <div class="controls">
+    <div class="label">Who plays the castaways</div>
+    <div class="mode" role="group" aria-label="Who plays the castaways">
+      <button id="mode-ai" type="button" aria-pressed="false">Claude agents</button>
+      <button id="mode-demo" type="button" aria-pressed="true">Scripted (free)</button>
+    </div>
+  </div>
+  <p id="mode-note" class="msg">Connecting to the game server...</p>
 
-  <main>
-    <p id="page-message" class="message"></p>
-
-    <section class="panel">
-      <h2>1. Choose the cast</h2>
-      <div id="cast-list" class="cast-list"></div>
-      <div class="row">
-        <label>Talk budget per intermission (tokens)
-          <input id="talk-budget" type="number" min="50" max="5000" step="50" value="600">
-        </label>
-        <button id="start-game" type="button">Start new game</button>
+  <section id="game" class="camp" hidden>
+    <div class="head">
+      <div>
+        <div class="label">The island</div>
+        <h2 id="summary"></h2>
       </div>
-      <p id="start-message" class="message"></p>
-    </section>
-
-    <section class="panel">
-      <h2>2. Add your own castaway</h2>
-      <form id="create-form" class="form-grid">
-        <label>Name
-          <input id="char-name" required maxlength="40">
-        </label>
-        <label>Background
-          <textarea id="char-bio" required maxlength="500" rows="3"></textarea>
-        </label>
-        <label>Personality
-          <textarea id="char-personality" required maxlength="300" rows="2"></textarea>
-        </label>
-        <fieldset class="stats-fields">
-          <legend>Stats (1 to 10)</legend>
-          <label>Physical <input id="char-physical" type="number" min="1" max="10" value="5" required></label>
-          <label>Mental <input id="char-mental" type="number" min="1" max="10" value="5" required></label>
-          <label>Social <input id="char-social" type="number" min="1" max="10" value="5" required></label>
-          <label>Strategy <input id="char-strategy" type="number" min="1" max="10" value="5" required></label>
-        </fieldset>
-        <div class="row">
-          <button type="submit">Add castaway</button>
-          <p id="character-message" class="message"></p>
-        </div>
-      </form>
-    </section>
-
-    <section id="game" class="panel" hidden>
-      <h2>3. Island</h2>
       <div class="row">
-        <strong id="game-summary"></strong>
-        <label class="inline"><input id="talk-toggle" type="checkbox" checked> Private talks before each episode</label>
-        <button id="next-episode" type="button">Run next episode</button>
-        <button id="reset-game" type="button" class="secondary">End game</button>
+        <label class="check"><input id="talk" type="checkbox" checked> Private talks first</label>
+        <button id="next" class="btn" type="button">Run next episode</button>
+        <button id="stop" class="btn ghost" type="button" hidden>Stop</button>
+        <button id="end" class="btn ghost" type="button">End game</button>
       </div>
-      <p id="game-message" class="message"></p>
-      <p id="spend" class="muted"></p>
+    </div>
+    <p id="game-msg" class="msg"></p>
+    <div class="board" id="board"></div>
+    <p id="spend" class="tally"></p>
+    <div class="two">
+      <div><div class="label">Tribal councils</div><div class="log" id="councils"></div></div>
+      <div><div class="label">Private conversations</div><div class="log" id="talks"></div></div>
+    </div>
+  </section>
 
-      <h3>Castaways</h3>
-      <div id="players" class="players"></div>
+  <section class="camp">
+    <div class="head">
+      <div>
+        <div class="label">Step 1</div>
+        <h2>Choose the cast</h2>
+      </div>
+      <div class="row">
+        <label class="field">Talk budget per castaway (tokens)
+          <input id="budget" class="num" type="number" min="50" max="2000" step="50" value="300">
+        </label>
+        <button id="start" class="btn" type="button">Start new game</button>
+      </div>
+    </div>
+    <div class="cast" id="cast"></div>
+    <p id="start-msg" class="msg">Pick 4 to 20 castaways. Stats: P physical, M mental, S social, St strategy.</p>
+  </section>
 
-      <h3>Tribal councils</h3>
-      <div id="episodes"></div>
-
-      <h3>Private conversations</h3>
-      <div id="conversations"></div>
-    </section>
-  </main>
-
-  <script src="/app.js"></script>
+  <section class="camp">
+    <div>
+      <div class="label">Step 2, optional</div>
+      <h2>Add your own castaway</h2>
+    </div>
+    <form id="form" class="form">
+      <label class="field">Name <input id="f-name" required maxlength="40" placeholder="Jamie Cole"></label>
+      <label class="field">Personality <input id="f-personality" required maxlength="300" placeholder="Loud, funny, holds a grudge forever"></label>
+      <label class="field wide">Photo (optional) <input id="f-photo" type="file" accept="image/*"></label>
+      <label class="field wide">Background <textarea id="f-bio" required maxlength="500" rows="2" placeholder="Bartender from Ohio who has never lost an arm-wrestling match."></textarea></label>
+      <div class="stats wide">
+        <label class="field">Physical <input id="f-physical" class="num" type="number" min="1" max="10" value="5" required></label>
+        <label class="field">Mental <input id="f-mental" class="num" type="number" min="1" max="10" value="5" required></label>
+        <label class="field">Social <input id="f-social" class="num" type="number" min="1" max="10" value="5" required></label>
+        <label class="field">Strategy <input id="f-strategy" class="num" type="number" min="1" max="10" value="5" required></label>
+      </div>
+      <div class="row wide">
+        <button class="btn" type="submit">Add castaway</button>
+        <p id="form-msg" class="msg"></p>
+      </div>
+    </form>
+  </section>
+</div>
+<script src="/engine.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>
